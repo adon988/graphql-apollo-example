@@ -1,11 +1,24 @@
-import { ApolloServer, gql } from 'apollo-server-express';
-import { ApolloServerPluginDrainHttpServer } from 'apollo-server-core';
-import express from 'express';
-import http from 'http';
-import {v4 as uuidv4} from 'uuid';
+const { ApolloServer, gql } = require('apollo-server-express');
+const { ApolloServerPluginDrainHttpServer } = require('apollo-server-core');
+const express = require('express');
+const http = require('http');
+const { v4 } = require('uuid');
+const { Member, Student } = require('./models/');
+const Students  = require('./data-source/student');
+
 
 // Schema
 const typeDefs = gql`
+  type Member {
+    _id: ID!  # mongodb default id is _id
+    name: String
+    age: Int
+  }
+  type Student {
+    _id: ID!  # mongodb default id is _id
+    name: String
+    age: Int
+  }
   # Library > Book > Author
   type Library {
     branch: String!
@@ -48,6 +61,10 @@ type Query {
     articles: [Article]
     article(id: ID!): Article 
     libraries: [Library]
+    members: [Member!]
+    member(id: ID!): Member!
+    students: [Student!]
+    student(id: ID!): Student!
 }
 input CreateArticleInput {
     title: String!
@@ -109,6 +126,22 @@ const books = [
 // Query
 const resolvers = {
     Query: {
+      async members () {
+        const members = await Member.find();
+        return members;
+      },
+      async member (parent, { id }) {
+        const member = await Member.findById( id );
+        return member;
+      },
+      async students (parent, args, {dataSources }) {
+        const students = await dataSources.students.getAll();//from data-source/student.js
+        return students;
+      },
+      async student (parent, { id }, { dataSources }) {
+        const student = await dataSources.students.get(id);//from data-source/student.js
+        return student;
+      },
       libraries() {
         return libraries;
       },
@@ -164,7 +197,7 @@ const resolvers = {
     },
     Mutation: {
       createArticle(parent, {article}, context, info) {
-          article.id = uuidv4();
+          article.id = v4();
           articles.push(article);
           return article;
       },
@@ -199,6 +232,11 @@ async function startApolloServer(typeDefs, resolvers) {
       //each GraphQL request will process inn here
       //The context function defined above is called once for every GraphQL operation that clients send to our server. The return value of this function becomes the context argument that's passed to every resolver that runs as part of that operation.
 
+    },
+    dataSources (){
+      return {
+        students: new Students(Student)
+      }
     },
     plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
   });
